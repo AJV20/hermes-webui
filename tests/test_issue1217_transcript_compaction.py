@@ -4,7 +4,7 @@ import json
 import sys
 from types import SimpleNamespace
 
-from api.models import Session, reconciled_state_db_messages_for_session
+from api.models import Session, reconciled_state_db_messages_for_session, state_db_delta_after_context
 
 from api.streaming import (
     _assistant_reply_added_after_current_turn,
@@ -680,6 +680,24 @@ def test_explicit_continue_keeps_compacted_active_task_context(tmp_path):
     )
 
     assert _context_messages_for_new_turn(session, "继续") == compacted_task_context
+
+
+def test_state_db_delta_preserves_fresh_rows_before_repeated_context_message():
+    sidecar_context = [
+        {"role": "user", "content": "ok"},
+        {"role": "assistant", "content": "ready"},
+    ]
+    state_messages = [
+        {"role": "user", "content": "ok", "timestamp": 1.0},
+        {"role": "assistant", "content": "ready", "timestamp": 2.0},
+        {"role": "user", "content": "fresh question", "timestamp": 3.0},
+        {"role": "user", "content": "ok", "timestamp": 4.0},
+        {"role": "assistant", "content": "after repeat", "timestamp": 5.0},
+    ]
+
+    delta = state_db_delta_after_context(sidecar_context, state_messages)
+
+    assert [m["content"] for m in delta] == ["fresh question", "ok", "after repeat"]
 
 
 def test_streaming_reconciled_context_keeps_casual_greeting_suppression():
